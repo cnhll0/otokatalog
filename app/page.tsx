@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
+import Interactive3DCategories from "@/components/Interactive3DCategories";
 
 type Vehicle = {
   id: string;
@@ -321,7 +322,7 @@ export default function Home() {
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12 relative overflow-x-hidden pb-24">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* ÜST BAR / KURUMSAL OTOKATALOG LOGO */}
+        {/* ÜST BAR / KURUMSAL OTOKATALOG LOGO (Admin butonu kaldırıldı, /admin ile doğrudan erişilir) */}
         <div className="border-b border-slate-800 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
@@ -348,7 +349,7 @@ export default function Home() {
             {kullaniciMail ? (
               <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
                 <span className="text-slate-300">👤 {kullaniciMail}</span>
-                <button onClick={cikisYap} className="text-rose-400 hover:text-rose-300 font-semibold ml-1">
+                <button onClick={cikisYap} className="text-rose-400 hover:text-rose-300 font-semibold ml-1 cursor-pointer">
                   Çıkış
                 </button>
               </div>
@@ -363,7 +364,7 @@ export default function Home() {
 
             <button
               onClick={() => setSepetAcik(true)}
-              className="relative px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 shadow-lg shadow-blue-600/20"
+              className="relative px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 shadow-lg shadow-blue-600/20 cursor-pointer"
             >
               <span>🛒 Sepetim</span>
               {toplamAdet > 0 && (
@@ -379,15 +380,11 @@ export default function Home() {
             >
               📦 Sipariş Takibi
             </Link>
-
-            <Link
-              href="/admin"
-              className="px-3.5 py-2 bg-slate-900 border border-slate-700 hover:border-slate-500 hover:bg-slate-800 text-slate-200 text-xs font-semibold rounded-xl transition"
-            >
-              ⚙️ Admin
-            </Link>
           </div>
         </div>
+
+        {/* 3D İNTERAKTİF PARÇA ANİMASYONLARI (FAR, MOTOR, FREN, KAPUT, TURBO, ECU) */}
+        <Interactive3DCategories />
 
         {/* HAVALE İÇİN SİPARİŞ BİLDİRİMİ */}
         {siparisBasariliId && (
@@ -398,7 +395,7 @@ export default function Home() {
                 Sipariş Takip Kodu: <span className="font-mono font-bold text-white">#{siparisBasariliId}</span>
               </p>
             </div>
-            <button onClick={() => setSiparisBasariliId(null)} className="text-xs text-slate-400 hover:text-white">
+            <button onClick={() => setSiparisBasariliId(null)} className="text-xs text-slate-400 hover:text-white cursor-pointer">
               Kapat ✕
             </button>
           </div>
@@ -413,7 +410,7 @@ export default function Home() {
             {(secilenMarka || secilenVehicleId || secilenKategori !== "Tümü" || minFiyat || maxFiyat || aramaMetni || siralama !== "varsayilan") && (
               <button
                 onClick={filtreleriTemizle}
-                className="text-xs text-rose-400 hover:underline font-semibold"
+                className="text-xs text-rose-400 hover:underline font-semibold cursor-pointer"
               >
                 Filtreleri Temizle
               </button>
@@ -833,7 +830,7 @@ export default function Home() {
           <span className="text-base">🏠</span>
           <span>Vitrin</span>
         </Link>
-        <button onClick={() => setSepetAcik(true)} className="flex flex-col items-center text-[10px] text-blue-400 relative">
+        <button onClick={() => setSepetAcik(true)} className="flex flex-col items-center text-[10px] text-blue-400 relative cursor-pointer">
           <span className="text-base">🛒</span>
           <span>Sepet ({toplamAdet})</span>
         </button>
