@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+
+const ADMIN_EMAIL = "cnhll@icloud.com";
 
 type Product = {
   id: string;
@@ -37,6 +40,8 @@ type Order = {
 };
 
 export default function AdminPage() {
+  const router = useRouter();
+  const [yetkiliMi, setYetkiliMi] = useState(false);
   const [sekme, setSekme] = useState<"urunler" | "yeni_urun" | "siparisler">("urunler");
   const [products, setProducts] = useState<Product[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -60,8 +65,27 @@ export default function AdminPage() {
   const [kargoFirma, setKargoFirma] = useState<{ [orderId: string]: string }>({});
 
   useEffect(() => {
-    verileriYukle();
-  }, []);
+    async function yetkiVeVeriKontrol() {
+      // 1. Oturum Kontrolü
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      if (session.user.email !== ADMIN_EMAIL) {
+        alert("Bu panele erişim yetkiniz yok!");
+        router.replace("/");
+        return;
+      }
+
+      setYetkiliMi(true);
+      await verileriYukle();
+    }
+
+    yetkiVeVeriKontrol();
+  }, [router]);
 
   async function verileriYukle() {
     setYukleniyor(true);
@@ -85,7 +109,7 @@ export default function AdminPage() {
 
       if (vErr) console.error("Araç yükleme hatası:", vErr);
 
-      // 3. Siparişleri Güvenli Çek (Join olmadan, direkt)
+      // 3. Siparişleri Güvenli Çek
       const { data: oData, error: oErr } = await supabase
         .from("orders")
         .select("*")
@@ -179,6 +203,24 @@ export default function AdminPage() {
     verileriYukle();
   };
 
+  // GÜVENLİ ÇIKIŞ YAPMA
+  const cikisYap = async () => {
+    await supabase.auth.signOut();
+    router.replace("/");
+  };
+
+  // Yetki doğrulanana kadar gösterilecek yüklenme ekranı
+  if (!yetkiliMi) {
+    return (
+      <main className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-xs">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p>Yönetici yetkisi doğrulanıyor...</p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -187,18 +229,26 @@ export default function AdminPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
           <div>
             <span className="text-xs font-semibold px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg">
-              Yönetici Paneli
+              Yönetici Paneli ({ADMIN_EMAIL})
             </span>
             <h1 className="text-2xl md:text-3xl font-bold text-white mt-2">
               Envanter & Sipariş Kontrol Merkezi
             </h1>
           </div>
-          <Link
-            href="/"
-            className="px-4 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold rounded-xl self-start sm:self-center transition"
-          >
-            ← Mağazaya Dön
-          </Link>
+          <div className="flex items-center gap-2 self-start sm:self-center">
+            <Link
+              href="/"
+              className="px-4 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition"
+            >
+              ← Mağazaya Dön
+            </Link>
+            <button
+              onClick={cikisYap}
+              className="px-4 py-2 bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold rounded-xl transition"
+            >
+              Çıkış Yap
+            </button>
+          </div>
         </div>
 
         {hataMesaji && (
