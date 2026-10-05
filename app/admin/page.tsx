@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-const ADMIN_EMAIL = "cnhll@icloud.com";
+const ADMIN_EMAIL = "cnhll@otoparca.com";
 
 type Product = {
   id: string;
