@@ -59,6 +59,9 @@ export default function Home() {
   const [maxFiyat, setMaxFiyat] = useState<string>("");
   const [siralama, setSiralama] = useState<"varsayilan" | "artan" | "azalan">("varsayilan");
 
+  // SANAL GARAJ (VIRTUAL GARAGE) STATE
+  const [garajArac, setGarajArac] = useState<Vehicle | null>(null);
+
   // SAYFALAMA
   const [aktifSayfa, setAktifSayfa] = useState<number>(1);
 
@@ -97,10 +100,21 @@ export default function Home() {
     setKullaniciMail(null);
   };
 
+  // Sepet & Garaj LocalStorage Yükleme
   useEffect(() => {
-    const kayitli = localStorage.getItem("oto_sepet");
-    if (kayitli) {
-      try { setSepet(JSON.parse(kayitli)); } catch (e) {}
+    const kayitliSepet = localStorage.getItem("oto_sepet");
+    if (kayitliSepet) {
+      try { setSepet(JSON.parse(kayitliSepet)); } catch (e) {}
+    }
+
+    const kayitliGaraj = localStorage.getItem("oto_garaj_arac");
+    if (kayitliGaraj) {
+      try {
+        const parsed = JSON.parse(kayitliGaraj);
+        setGarajArac(parsed);
+        setSecilenMarka(parsed.brand);
+        setSecilenVehicleId(parsed.id);
+      } catch (e) {}
     }
   }, []);
 
@@ -145,6 +159,28 @@ export default function Home() {
       (v) => v.brand.trim().toLowerCase() === secilenMarka.trim().toLowerCase()
     );
   }, [vehicles, secilenMarka]);
+
+  // Garaj İşlemleri
+  const garajaEkle = (arac: Vehicle) => {
+    setGarajArac(arac);
+    localStorage.setItem("oto_garaj_arac", JSON.stringify(arac));
+  };
+
+  const garajdanCikar = () => {
+    setGarajArac(null);
+    localStorage.removeItem("oto_garaj_arac");
+    setSecilenMarka("");
+    setSecilenVehicleId("");
+    setAktifSayfa(1);
+  };
+
+  const garajFiltresiniUygula = () => {
+    if (garajArac) {
+      setSecilenMarka(garajArac.brand);
+      setSecilenVehicleId(garajArac.id);
+      setAktifSayfa(1);
+    }
+  };
 
   const filtreleriTemizle = () => {
     setSecilenMarka("");
@@ -198,7 +234,7 @@ export default function Home() {
   const toplamTutar = sepet.reduce((top, i) => top + i.product.price * i.quantity, 0);
   const toplamAdet = sepet.reduce((top, i) => top + i.quantity, 0);
 
-  // SİPARİŞ TAMAMLAMA & YÖNLENDİRME
+  // SİPARİŞ TAMAMLAMA
   const siparisiTamamla = async (e: React.FormEvent) => {
     e.preventDefault();
     setSiparisYukleniyor(true);
@@ -223,7 +259,6 @@ export default function Home() {
 
       const yeniOrderId = data.order_id;
 
-      // UI stoklarını güncelle
       setProducts((prev) =>
         prev.map((urun) => {
           const sepetKalemi = sepet.find((s) => s.product.id === urun.id);
@@ -318,11 +353,13 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const suankiSeciliAracObj = vehicles.find((v) => v.id === secilenVehicleId);
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12 relative overflow-x-hidden pb-24">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* ÜST BAR / KURUMSAL OTOKATALOG LOGO (Admin butonu kaldırıldı) */}
+        {/* ÜST BAR / KURUMSAL LOGO & GARAJ ROZETİ */}
         <div className="border-b border-slate-800 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
@@ -346,6 +383,31 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 self-start sm:self-center">
+            {/* SANAL GARAJ ROZETİ (ÜST BAR) */}
+            {garajArac ? (
+              <div className="flex items-center gap-2 bg-gradient-to-r from-blue-950/80 to-slate-900 border border-blue-500/40 px-3 py-1.5 rounded-xl shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+                <button
+                  onClick={garajFiltresiniUygula}
+                  title="Garajdaki araca göre filtrele"
+                  className="flex items-center gap-1.5 text-xs text-blue-300 hover:text-white font-semibold cursor-pointer"
+                >
+                  <span>🏎️ Garajım:</span>
+                  <span className="text-white font-bold">{garajArac.brand} {garajArac.model}</span>
+                </button>
+                <button
+                  onClick={garajdanCikar}
+                  title="Garajı temizle"
+                  className="text-slate-500 hover:text-rose-400 text-xs pl-1 border-l border-slate-800 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-900/60 border border-slate-800 px-3 py-1.5 rounded-xl">
+                <span>🚘 Garajınız Boş</span>
+              </div>
+            )}
+
             {kullaniciMail ? (
               <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl text-xs">
                 <span className="text-slate-300">👤 {kullaniciMail}</span>
@@ -383,7 +445,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 3D İNTERAKTİF PARÇA ANİMASYONLARI (Kategori tıklandığında hem animasyon çalışır hem liste filtrelenir) */}
+        {/* 3D İNTERAKTİF PARÇA ANİMASYONLARI */}
         <Interactive3DCategories
           activeCategory={secilenKategori}
           onSelectCategory={(kat) => {
@@ -391,6 +453,24 @@ export default function Home() {
             setAktifSayfa(1);
           }}
         />
+
+        {/* SANAL GARAJ AKTİF BİLDİRİM BANNERI */}
+        {secilenVehicleId && garajArac && garajArac.id === secilenVehicleId && (
+          <div className="p-3.5 rounded-2xl bg-blue-950/40 border border-blue-500/30 flex items-center justify-between text-xs text-blue-200">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping" />
+              <span>
+                Şu an garajınızdaki <strong>{garajArac.brand} {garajArac.model} ({garajArac.year_start}-{garajArac.year_end || "Günümüz"})</strong> aracına uyumlu parçalar listeleniyor.
+              </span>
+            </div>
+            <button
+              onClick={filtreleriTemizle}
+              className="text-blue-400 hover:text-white underline cursor-pointer font-semibold ml-2"
+            >
+              Tüm Parçaları Göster
+            </button>
+          </div>
+        )}
 
         {/* HAVALE İÇİN SİPARİŞ BİLDİRİMİ */}
         {siparisBasariliId && (
@@ -407,20 +487,32 @@ export default function Home() {
           </div>
         )}
 
-        {/* FİLTRELEME PANELİ */}
+        {/* FİLTRELEME PANELİ & GARAJA EKLE BUTONU */}
         <div id="parca-katalog-alani" className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
           <div className="flex items-center justify-between">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
               🔍 Akıllı Parça ve Araç Filtresi
             </h2>
-            {(secilenMarka || secilenVehicleId || secilenKategori !== "Tümü" || minFiyat || maxFiyat || aramaMetni || siralama !== "varsayilan") && (
-              <button
-                onClick={filtreleriTemizle}
-                className="text-xs text-rose-400 hover:underline font-semibold cursor-pointer"
-              >
-                Filtreleri Temizle
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {/* Seçili Aracı Garaja Ekle Butonu */}
+              {suankiSeciliAracObj && (!garajArac || garajArac.id !== suankiSeciliAracObj.id) && (
+                <button
+                  onClick={() => garajaEkle(suankiSeciliAracObj)}
+                  className="text-xs bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 px-2.5 py-1 rounded-lg transition font-semibold flex items-center gap-1 cursor-pointer"
+                >
+                  <span>🚘 Bu Aracı Garajıma Ekle</span>
+                </button>
+              )}
+
+              {(secilenMarka || secilenVehicleId || secilenKategori !== "Tümü" || minFiyat || maxFiyat || aramaMetni || siralama !== "varsayilan") && (
+                <button
+                  onClick={filtreleriTemizle}
+                  className="text-xs text-rose-400 hover:underline font-semibold cursor-pointer"
+                >
+                  Filtreleri Temizle
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
@@ -738,7 +830,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* CHECKOUT MODALI / ÖDEME YÖNTEMİ SEÇİMLİ */}
+      {/* CHECKOUT MODALI */}
       {checkoutAcik && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div onClick={() => setCheckoutAcik(false)} className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
@@ -785,7 +877,6 @@ export default function Home() {
                 />
               </div>
 
-              {/* ÖDEME YÖNTEMİ SEÇİMİ */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-2">Ödeme Yöntemi</label>
                 <div className="grid grid-cols-2 gap-2">
