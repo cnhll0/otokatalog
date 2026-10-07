@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import Interactive3DCategories from "@/components/Interactive3DCategories";
 
-// WHATSAPP DESTEK HATTI NUMARASI (Kendi numaranızla değiştirebilirsiniz)
+// WHATSAPP DESTEK HATTI NUMARASI
 const WHATSAPP_NO = "905000000000";
 
 type Vehicle = {
@@ -62,10 +62,10 @@ export default function Home() {
   const [maxFiyat, setMaxFiyat] = useState<string>("");
   const [siralama, setSiralama] = useState<"varsayilan" | "artan" | "azalan">("varsayilan");
 
-  // SANAL GARAJ (VIRTUAL GARAGE) STATE
+  // SANAL GARAJ (VIRTUAL GARAGE)
   const [garajArac, setGarajArac] = useState<Vehicle | null>(null);
 
-  // ŞASİ NUMARASI (VIN) STATE
+  // ŞASİ NUMARASI (VIN)
   const [sasiNo, setSasiNo] = useState<string>("");
   const [sasiBilgi, setSasiBilgi] = useState<string | null>(null);
   const [sasiYukleniyor, setSasiYukleniyor] = useState<boolean>(false);
@@ -78,11 +78,18 @@ export default function Home() {
   const [sepetAcik, setSepetAcik] = useState<boolean>(false);
   const [checkoutAcik, setCheckoutAcik] = useState<boolean>(false);
 
-  // SİPARİŞ FORMU
+  // SİPARİŞ & SANAL POS KART FORMU
   const [musteriAd, setMusteriAd] = useState("");
   const [telefon, setTelefon] = useState("");
   const [adres, setAdres] = useState("");
   const [odemeYontemi, setOdemeYontemi] = useState<"kart" | "havale">("kart");
+
+  // Canlı Kredi Kartı Alanları
+  const [kartAdSoyad, setKartAdSoyad] = useState("");
+  const [kartNo, setKartNo] = useState("");
+  const [kartSkt, setKartSkt] = useState("");
+  const [kartCvc, setKartCvc] = useState("");
+
   const [siparisYukleniyor, setSiparisYukleniyor] = useState(false);
   const [siparisBasariliId, setSiparisBasariliId] = useState<string | null>(null);
 
@@ -108,7 +115,6 @@ export default function Home() {
     setKullaniciMail(null);
   };
 
-  // Sepet & Garaj LocalStorage Yükleme
   useEffect(() => {
     const kayitliSepet = localStorage.getItem("oto_sepet");
     if (kayitliSepet) {
@@ -130,7 +136,6 @@ export default function Home() {
     localStorage.setItem("oto_sepet", JSON.stringify(sepet));
   }, [sepet]);
 
-  // VERİLERİ ÇEK
   useEffect(() => {
     async function verileriGetir() {
       setYukleniyor(true);
@@ -168,7 +173,7 @@ export default function Home() {
     );
   }, [vehicles, secilenMarka]);
 
-  // GERÇEK GLOBAL VIN (ŞASİ) ÇÖZÜCÜ FONKSİYONU
+  // ŞASİ NUMARASI (VIN) ÇÖZÜCÜ
   const sasiNoCoz = async () => {
     const vin = sasiNo.trim().toUpperCase();
     if (vin.length !== 17) {
@@ -191,7 +196,6 @@ export default function Home() {
         const gelenModel = sonuc.Model?.trim() || "";
         const gelenYil = sonuc.ModelYear?.trim() || "";
 
-        // Bizim veritabanındaki markalarla eşleştir
         const eslesenMarka = markalar.find(
           (m) => m.toLowerCase() === gelenMarka.toLowerCase()
         );
@@ -199,7 +203,6 @@ export default function Home() {
         if (eslesenMarka) {
           setSecilenMarka(eslesenMarka);
 
-          // Modeli bizim araç listesinde ara
           if (gelenModel) {
             const eslesenArac = vehicles.find(
               (v) =>
@@ -303,6 +306,23 @@ export default function Home() {
   const toplamTutar = sepet.reduce((top, i) => top + i.product.price * i.quantity, 0);
   const toplamAdet = sepet.reduce((top, i) => top + i.quantity, 0);
 
+  // Kart No Maskeleme (4'erli boşluk)
+  const handleKartNoChange = (val: string) => {
+    const temiz = val.replace(/\D/g, "").slice(0, 16);
+    const parcali = temiz.match(/.{1,4}/g)?.join(" ") || temiz;
+    setKartNo(parcali);
+  };
+
+  // SKT Maskeleme (AA/YY)
+  const handleSktChange = (val: string) => {
+    const temiz = val.replace(/\D/g, "").slice(0, 4);
+    if (temiz.length >= 3) {
+      setKartSkt(`${temiz.slice(0, 2)}/${temiz.slice(2)}`);
+    } else {
+      setKartSkt(temiz);
+    }
+  };
+
   // WHATSAPP İLE PARÇA SORMA
   const whatsappParcaSor = (product: Product, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -311,7 +331,7 @@ export default function Home() {
     window.open(url, "_blank");
   };
 
-  // SİPARİŞ TAMAMLAMA
+  // GÜVENLİ SİPARİŞ VE POS AKIŞI
   const siparisiTamamla = async (e: React.FormEvent) => {
     e.preventDefault();
     setSiparisYukleniyor(true);
@@ -323,6 +343,30 @@ export default function Home() {
         unit_price: item.product.price,
       }));
 
+      // 1. Önce Backend Güvenlik & Doğrulama API'sine İstek At
+      if (odemeYontemi === "kart") {
+        const posRes = await fetch("/api/odeme", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: itemsPayload,
+            kartBilgileri: {
+              adSoyad: kartAdSoyad,
+              kartNo: kartNo,
+              skt: kartSkt,
+              cvc: kartCvc,
+            },
+            musteriBilgileri: { musteriAd, telefon, adres },
+          }),
+        });
+
+        const posData = await posRes.json();
+        if (!posRes.ok || !posData.success) {
+          throw new Error(posData.message || "Ödeme işlemi banka tarafından reddedildi.");
+        }
+      }
+
+      // 2. Doğrulama başarılıysa Supabase RPC ile siparişi yaz ve stok düş
       const { data, error } = await supabase.rpc("complete_order_and_reduce_stock", {
         p_customer_email: kullaniciMail || "Misafir",
         p_customer_name: musteriAd,
@@ -336,6 +380,7 @@ export default function Home() {
 
       const yeniOrderId = data.order_id;
 
+      // UI stok güncellemesi
       setProducts((prev) =>
         prev.map((urun) => {
           const sepetKalemi = sepet.find((s) => s.product.id === urun.id);
@@ -359,7 +404,7 @@ export default function Home() {
         setAdres("");
       }
     } catch (hata: any) {
-      alert("Sipariş verilemedi: " + (hata.message || "Bilinmeyen hata"));
+      alert("Ödeme Hatası: " + (hata.message || "Bilinmeyen bir sorun oluştu."));
     }
     setSiparisYukleniyor(false);
   };
@@ -436,7 +481,7 @@ export default function Home() {
     <main className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12 relative overflow-x-hidden pb-24">
       <div className="max-w-7xl mx-auto space-y-8">
         
-        {/* ÜST BAR / KURUMSAL LOGO & GARAJ ROZETİ */}
+        {/* ÜST BAR */}
         <div className="border-b border-slate-800 pb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
@@ -522,7 +567,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 3D İNTERAKTİF PARÇA ANİMASYONLARI */}
+        {/* 3D PARÇA VİTRİNİ */}
         <Interactive3DCategories
           activeCategory={secilenKategori}
           onSelectCategory={(kat) => {
@@ -549,7 +594,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* HAVALE İÇİN SİPARİŞ BİLDİRİMİ */}
+        {/* SİPARİŞ BİLDİRİMİ */}
         {siparisBasariliId && (
           <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm flex items-center justify-between">
             <div>
@@ -564,7 +609,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* FİLTRELEME PANELİ & ŞASİ (VIN) SORGULAMA */}
+        {/* FİLTRE PANELİ & ŞASİ (VIN) */}
         <div id="parca-katalog-alani" className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
@@ -591,7 +636,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ŞASİ NUMARASI (VIN) SORGULAMA BARI */}
+          {/* ŞASİ (VIN) BARI */}
           <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl flex flex-col sm:flex-row items-center gap-3">
             <span className="text-xs font-mono font-bold text-blue-400 shrink-0">
               🆔 ŞASİ NO (VIN):
@@ -828,7 +873,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* SAYFA GEÇİŞ BARLARI */}
+          {/* SAYFALAMA */}
           {!yukleniyor && toplamSayfaSayisi > 1 && (
             <div className="flex flex-wrap items-center justify-center gap-2 pt-10 border-t border-slate-800 mt-8">
               <button
@@ -943,53 +988,59 @@ export default function Home() {
         </div>
       )}
 
-      {/* CHECKOUT MODALI */}
+      {/* CHECKOUT & SANAL POS MODALI */}
       {checkoutAcik && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div onClick={() => setCheckoutAcik(false)} className="fixed inset-0 bg-black/70 backdrop-blur-sm" />
-          <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl z-10 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div onClick={() => setCheckoutAcik(false)} className="fixed inset-0 bg-black/75 backdrop-blur-sm" />
+          <div className="relative w-full max-w-xl bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl z-10 space-y-5 my-8">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">Teslimat & Sipariş Onayı</h3>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <span>🔒 Güvenli Ödeme & Teslimat</span>
+              </h3>
               <button onClick={() => setCheckoutAcik(false)} className="text-slate-400 hover:text-white text-sm cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={siparisiTamamla} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Ad Soyad *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ahmet Yılmaz"
-                  value={musteriAd}
-                  onChange={(e) => setMusteriAd(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
+              {/* Teslimat Bilgileri */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Ad Soyad *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ahmet Yılmaz"
+                    value={musteriAd}
+                    onChange={(e) => setMusteriAd(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Telefon *</label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="0555 123 45 67"
-                  value={telefon}
-                  onChange={(e) => setTelefon(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
-                />
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Telefon *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="0555 123 45 67"
+                    value={telefon}
+                    onChange={(e) => setTelefon(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Teslimat Adresi *</label>
                 <textarea
                   required
-                  rows={3}
-                  placeholder="Mahalle, sokak, kapı no..."
+                  rows={2}
+                  placeholder="Mahalle, sokak, bina ve kapı no, ilçe/il..."
                   value={adres}
                   onChange={(e) => setAdres(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 resize-none"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500 resize-none"
                 />
               </div>
 
+              {/* Ödeme Yöntemi Seçimi */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-2">Ödeme Yöntemi</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -998,18 +1049,18 @@ export default function Home() {
                     onClick={() => setOdemeYontemi("kart")}
                     className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
                       odemeYontemi === "kart"
-                        ? "bg-blue-600/20 border-blue-500 text-white"
+                        ? "bg-blue-600/20 border-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]"
                         : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
                     }`}
                   >
-                    <span>💳 Kredi Kartı / 3D</span>
+                    <span>💳 Kredi Kartı / 3D Secure</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setOdemeYontemi("havale")}
                     className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
                       odemeYontemi === "havale"
-                        ? "bg-blue-600/20 border-blue-500 text-white"
+                        ? "bg-blue-600/20 border-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.2)]"
                         : "bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700"
                     }`}
                   >
@@ -1018,23 +1069,114 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* KART FORMU VE 3D CANLI KART ÖNİZLEMESİ */}
+              {odemeYontemi === "kart" && (
+                <div className="space-y-4 pt-1">
+                  {/* Canlı Kart Önizlemesi */}
+                  <div className="relative w-full h-44 rounded-2xl p-5 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 border border-blue-500/40 shadow-2xl flex flex-col justify-between overflow-hidden">
+                    <div className="absolute top-0 right-0 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+                    
+                    <div className="flex justify-between items-center relative z-10">
+                      <span className="font-mono text-[10px] text-blue-400 font-bold uppercase tracking-wider">
+                        OTO KATALOG SANAL POS
+                      </span>
+                      <span className="font-mono text-xs font-black text-white italic">
+                        {kartNo.startsWith("4") ? "VISA" : kartNo.startsWith("5") ? "Mastercard" : "KART"}
+                      </span>
+                    </div>
+
+                    <div className="relative z-10">
+                      <span className="font-mono text-lg tracking-widest text-white drop-shadow">
+                        {kartNo || "•••• •••• •••• ••••"}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-[10px] font-mono text-slate-300 relative z-10">
+                      <div>
+                        <span className="text-slate-500 block text-[8px]">KART SAHİBİ</span>
+                        <span className="uppercase font-bold">{kartAdSoyad || "AD SOYAD"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 block text-[8px]">SKT</span>
+                        <span className="font-bold">{kartSkt || "AA/YY"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Kart Giriş Alanları */}
+                  <div className="space-y-3 bg-slate-950/60 border border-slate-800 p-4 rounded-2xl">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">Kart Üzerindeki İsim</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ad Soyad"
+                        value={kartAdSoyad}
+                        onChange={(e) => setKartAdSoyad(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white uppercase focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">Kart Numarası</label>
+                      <input
+                        type="text"
+                        required
+                        maxLength={19}
+                        placeholder="0000 0000 0000 0000"
+                        value={kartNo}
+                        onChange={(e) => handleKartNoChange(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono tracking-wider focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">Son Kullanma (AA/YY)</label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={5}
+                          placeholder="MM/YY"
+                          value={kartSkt}
+                          onChange={(e) => handleSktChange(e.target.value)}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-center focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-400 mb-1">Güvenlik Kodu (CVC)</label>
+                        <input
+                          type="password"
+                          required
+                          maxLength={4}
+                          placeholder="•••"
+                          value={kartCvc}
+                          onChange={(e) => setKartCvc(e.target.value.replace(/\D/g, ""))}
+                          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono text-center focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={siparisYukleniyor}
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white font-semibold rounded-xl text-sm transition shadow-lg shadow-emerald-600/20 cursor-pointer"
+                className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs sm:text-sm transition shadow-lg shadow-emerald-600/20 cursor-pointer"
               >
                 {siparisYukleniyor
-                  ? "İşlem Yapılıyor..."
+                  ? "Banka ile İletişim Kuruluyor..."
                   : odemeYontemi === "kart"
-                  ? "Kartla Güvenli Öde (3D Secure)"
-                  : "Siparişi Onayla"}
+                  ? `Güvenli Öde (3D Secure) • ₺${toplamTutar.toLocaleString("tr-TR")}`
+                  : `Siparişi Onayla • ₺${toplamTutar.toLocaleString("tr-TR")}`}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* SAĞ ALT SABİT WHATSAPP DESTEK BUTONU */}
+      {/* SAĞ ALT SABİT WHATSAPP BUTONU */}
       <a
         href={`https://wa.me/${WHATSAPP_NO}?text=${encodeURIComponent("Merhaba Ustam, sitemizden parça arıyorum, parça fotoğrafı gönderip destek alabilir miyim?")}`}
         target="_blank"
@@ -1047,7 +1189,7 @@ export default function Home() {
         </span>
       </a>
 
-      {/* MOBİL İÇİN SABİT ALT NAVİGASYON */}
+      {/* MOBİL ALT MENÜ */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-3 flex items-center justify-around z-40">
         <Link href="/" className="flex flex-col items-center text-[10px] text-slate-300 hover:text-white">
           <span className="text-base">🏠</span>
