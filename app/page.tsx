@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import Interactive3DCategories from "@/components/Interactive3DCategories";
 
+// WHATSAPP DESTEK HATTI NUMARASI
+const WHATSAPP_NO = "905000000000";
+
 type Vehicle = {
   id: string;
   brand: string;
@@ -61,6 +64,10 @@ export default function Home() {
 
   // SANAL GARAJ (VIRTUAL GARAGE) STATE
   const [garajArac, setGarajArac] = useState<Vehicle | null>(null);
+
+  // ŞASİ NUMARASI (VIN) STATE
+  const [sasiNo, setSasiNo] = useState<string>("");
+  const [sasiBilgi, setSasiBilgi] = useState<string | null>(null);
 
   // SAYFALAMA
   const [aktifSayfa, setAktifSayfa] = useState<number>(1);
@@ -160,6 +167,46 @@ export default function Home() {
     );
   }, [vehicles, secilenMarka]);
 
+  // ŞASİ NUMARASI (VIN) ÇÖZÜCÜ
+  const sasiNoCoz = () => {
+    const vin = sasiNo.trim().toUpperCase();
+    if (vin.length !== 17) {
+      alert("Şasi numarası (VIN) 17 haneli olmalıdır.");
+      return;
+    }
+
+    // 10. Karakter model yılı eşlemesi
+    const yilKodu = vin.charAt(9);
+    const yilTablosu: Record<string, number> = {
+      S: 1995, T: 1996, V: 1997, W: 1998, X: 1999,
+      Y: 2000, "1": 2001, "2": 2002, "3": 2003, "4": 2004,
+      "5": 2005, "6": 2006, "7": 2007, "8": 2008, "9": 2009,
+      A: 2010, B: 2011, C: 2012, D: 2013, E: 2014,
+      F: 2015, G: 2016, H: 2017, J: 2018, K: 2019,
+      L: 2020, M: 2021, N: 2022, P: 2023, R: 2024
+    };
+    const tespitYil = yilTablosu[yilKodu];
+
+    // İlk 3 hane (WMI - Dünya Üretici Kodu)
+    let tespitMarka = "";
+    if (vin.startsWith("VF1")) tespitMarka = "Renault";
+    else if (vin.startsWith("WBA") || vin.startsWith("WBS")) tespitMarka = "BMW";
+    else if (vin.startsWith("WVW") || vin.startsWith("WV1")) tespitMarka = "Volkswagen";
+    else if (vin.startsWith("WAU")) tespitMarka = "Audi";
+    else if (vin.startsWith("WDB") || vin.startsWith("WDC")) tespitMarka = "Mercedes-Benz";
+    else if (vin.startsWith("VF7")) tespitMarka = "Citroen";
+    else if (vin.startsWith("VF3")) tespitMarka = "Peugeot";
+    else if (vin.startsWith("NM4") || vin.startsWith("ZFA")) tespitMarka = "Fiat";
+    else if (vin.startsWith("WF0")) tespitMarka = "Ford";
+
+    if (tespitMarka) {
+      setSecilenMarka(tespitMarka);
+      setSasiBilgi(`Tespit Edilen: ${tespitMarka} ${tespitYil ? `(${tespitYil} Model)` : ""}`);
+    } else {
+      setSasiBilgi(tespitYil ? `Model Yılı: ${tespitYil}` : "VIN doğrulandı.");
+    }
+  };
+
   // Garaj İşlemleri
   const garajaEkle = (arac: Vehicle) => {
     setGarajArac(arac);
@@ -190,6 +237,8 @@ export default function Home() {
     setMaxFiyat("");
     setSiralama("varsayilan");
     setAramaMetni("");
+    setSasiNo("");
+    setSasiBilgi(null);
     setAktifSayfa(1);
   };
 
@@ -233,6 +282,14 @@ export default function Home() {
 
   const toplamTutar = sepet.reduce((top, i) => top + i.product.price * i.quantity, 0);
   const toplamAdet = sepet.reduce((top, i) => top + i.quantity, 0);
+
+  // WHATSAPP İLE PARÇA SORMA
+  const whatsappParcaSor = (product: Product, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const mesaj = `Merhaba Ustam, sitenizdeki "${product.title}" parçası (OEM: ${product.oem_code || "Belirtilmemiş"}) hakkında bilgi almak ve görsel sormak istiyorum.`;
+    const url = `https://wa.me/${WHATSAPP_NO}?text=${encodeURIComponent(mesaj)}`;
+    window.open(url, "_blank");
+  };
 
   // SİPARİŞ TAMAMLAMA
   const siparisiTamamla = async (e: React.FormEvent) => {
@@ -383,7 +440,7 @@ export default function Home() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 self-start sm:self-center">
-            {/* SANAL GARAJ ROZETİ (ÜST BAR) */}
+            {/* SANAL GARAJ ROZETİ */}
             {garajArac ? (
               <div className="flex items-center gap-2 bg-gradient-to-r from-blue-950/80 to-slate-900 border border-blue-500/40 px-3 py-1.5 rounded-xl shadow-[0_0_15px_rgba(59,130,246,0.2)]">
                 <button
@@ -487,14 +544,13 @@ export default function Home() {
           </div>
         )}
 
-        {/* FİLTRELEME PANELİ & GARAJA EKLE BUTONU */}
+        {/* FİLTRELEME PANELİ & ŞASİ (VIN) SORGULAMA */}
         <div id="parca-katalog-alani" className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-300">
               🔍 Akıllı Parça ve Araç Filtresi
             </h2>
             <div className="flex items-center gap-3">
-              {/* Seçili Aracı Garaja Ekle Butonu */}
               {suankiSeciliAracObj && (!garajArac || garajArac.id !== suankiSeciliAracObj.id) && (
                 <button
                   onClick={() => garajaEkle(suankiSeciliAracObj)}
@@ -504,7 +560,7 @@ export default function Home() {
                 </button>
               )}
 
-              {(secilenMarka || secilenVehicleId || secilenKategori !== "Tümü" || minFiyat || maxFiyat || aramaMetni || siralama !== "varsayilan") && (
+              {(secilenMarka || secilenVehicleId || secilenKategori !== "Tümü" || minFiyat || maxFiyat || aramaMetni || sasiNo || siralama !== "varsayilan") && (
                 <button
                   onClick={filtreleriTemizle}
                   className="text-xs text-rose-400 hover:underline font-semibold cursor-pointer"
@@ -513,6 +569,32 @@ export default function Home() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* ŞASİ NUMARASI (VIN) SORGULAMA BARI */}
+          <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl flex flex-col sm:flex-row items-center gap-3">
+            <span className="text-xs font-mono font-bold text-blue-400 shrink-0">
+              🆔 ŞASİ NO (VIN):
+            </span>
+            <input
+              type="text"
+              maxLength={17}
+              placeholder="17 Haneli Şasi No Girin (Örn: VF1BA0...)"
+              value={sasiNo}
+              onChange={(e) => setSasiNo(e.target.value.toUpperCase())}
+              className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white uppercase font-mono tracking-widest focus:outline-none focus:border-blue-500 w-full sm:w-auto"
+            />
+            <button
+              onClick={sasiNoCoz}
+              className="w-full sm:w-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition cursor-pointer shrink-0"
+            >
+              Şasiyi Çöz & Filtrele
+            </button>
+            {sasiBilgi && (
+              <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 px-2.5 py-1 rounded-md">
+                ✓ {sasiBilgi}
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
@@ -701,13 +783,23 @@ export default function Home() {
                         </span>
                       </div>
 
-                      <button
-                        onClick={(e) => sepeteEkle(product, e)}
-                        disabled={product.stock <= 0}
-                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold text-xs rounded-xl transition shadow-md shadow-blue-600/20 cursor-pointer"
-                      >
-                        {product.stock > 0 ? "Sepete Ekle" : "Tükendi"}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={(e) => whatsappParcaSor(product, e)}
+                          title="WhatsApp ile fotoğraf veya uyumluluk sor"
+                          className="px-2.5 py-2 bg-emerald-600/20 hover:bg-emerald-600 border border-emerald-500/40 text-emerald-400 hover:text-white rounded-xl transition text-xs font-bold cursor-pointer"
+                        >
+                          💬 Sor
+                        </button>
+
+                        <button
+                          onClick={(e) => sepeteEkle(product, e)}
+                          disabled={product.stock <= 0}
+                          className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-semibold text-xs rounded-xl transition shadow-md shadow-blue-600/20 cursor-pointer"
+                        >
+                          {product.stock > 0 ? "Ekle" : "Tükendi"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -920,6 +1012,19 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* SAĞ ALT SABİT WHATSAPP DESTEK BUTONU */}
+      <a
+        href={`https://wa.me/${WHATSAPP_NO}?text=${encodeURIComponent("Merhaba Ustam, sitemizden parça arıyorum, parça fotoğrafı gönderip destek alabilir miyim?")}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-20 sm:bottom-6 right-6 z-40 bg-emerald-600 hover:bg-emerald-500 text-white p-3.5 rounded-full shadow-[0_0_25px_rgba(16,185,129,0.5)] border border-emerald-400 flex items-center gap-2 transition hover:scale-105 group"
+      >
+        <span className="text-xl">💬</span>
+        <span className="text-xs font-bold hidden sm:inline-block max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 ease-in-out whitespace-nowrap">
+          Ustaya Fotoğraf Gönder
+        </span>
+      </a>
 
       {/* MOBİL İÇİN SABİT ALT NAVİGASYON */}
       <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 p-3 flex items-center justify-around z-40">
