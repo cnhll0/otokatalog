@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "../lib/supabase";
 import Interactive3DCategories from "@/components/Interactive3DCategories";
 
-// WHATSAPP DESTEK HATTI NUMARASI
+// WHATSAPP DESTEK HATTI NUMARASI (Kendi numaranızla değiştirebilirsiniz)
 const WHATSAPP_NO = "905000000000";
 
 type Vehicle = {
@@ -68,6 +68,7 @@ export default function Home() {
   // ŞASİ NUMARASI (VIN) STATE
   const [sasiNo, setSasiNo] = useState<string>("");
   const [sasiBilgi, setSasiBilgi] = useState<string | null>(null);
+  const [sasiYukleniyor, setSasiYukleniyor] = useState<boolean>(false);
 
   // SAYFALAMA
   const [aktifSayfa, setAktifSayfa] = useState<number>(1);
@@ -167,44 +168,63 @@ export default function Home() {
     );
   }, [vehicles, secilenMarka]);
 
-  // ŞASİ NUMARASI (VIN) ÇÖZÜCÜ
-  const sasiNoCoz = () => {
+  // GERÇEK GLOBAL VIN (ŞASİ) ÇÖZÜCÜ FONKSİYONU
+  const sasiNoCoz = async () => {
     const vin = sasiNo.trim().toUpperCase();
     if (vin.length !== 17) {
       alert("Şasi numarası (VIN) 17 haneli olmalıdır.");
       return;
     }
 
-    // 10. Karakter model yılı eşlemesi
-    const yilKodu = vin.charAt(9);
-    const yilTablosu: Record<string, number> = {
-      S: 1995, T: 1996, V: 1997, W: 1998, X: 1999,
-      Y: 2000, "1": 2001, "2": 2002, "3": 2003, "4": 2004,
-      "5": 2005, "6": 2006, "7": 2007, "8": 2008, "9": 2009,
-      A: 2010, B: 2011, C: 2012, D: 2013, E: 2014,
-      F: 2015, G: 2016, H: 2017, J: 2018, K: 2019,
-      L: 2020, M: 2021, N: 2022, P: 2023, R: 2024
-    };
-    const tespitYil = yilTablosu[yilKodu];
+    setSasiYukleniyor(true);
+    setSasiBilgi("Şasi global veritabanında sorgulanıyor...");
 
-    // İlk 3 hane (WMI - Dünya Üretici Kodu)
-    let tespitMarka = "";
-    if (vin.startsWith("VF1")) tespitMarka = "Renault";
-    else if (vin.startsWith("WBA") || vin.startsWith("WBS")) tespitMarka = "BMW";
-    else if (vin.startsWith("WVW") || vin.startsWith("WV1")) tespitMarka = "Volkswagen";
-    else if (vin.startsWith("WAU")) tespitMarka = "Audi";
-    else if (vin.startsWith("WDB") || vin.startsWith("WDC")) tespitMarka = "Mercedes-Benz";
-    else if (vin.startsWith("VF7")) tespitMarka = "Citroen";
-    else if (vin.startsWith("VF3")) tespitMarka = "Peugeot";
-    else if (vin.startsWith("NM4") || vin.startsWith("ZFA")) tespitMarka = "Fiat";
-    else if (vin.startsWith("WF0")) tespitMarka = "Ford";
+    try {
+      const res = await fetch(
+        `https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${vin}?format=json`
+      );
+      const data = await res.json();
+      const sonuc = data.Results?.[0];
 
-    if (tespitMarka) {
-      setSecilenMarka(tespitMarka);
-      setSasiBilgi(`Tespit Edilen: ${tespitMarka} ${tespitYil ? `(${tespitYil} Model)` : ""}`);
-    } else {
-      setSasiBilgi(tespitYil ? `Model Yılı: ${tespitYil}` : "VIN doğrulandı.");
+      if (sonuc && sonuc.Make) {
+        const gelenMarka = sonuc.Make.trim();
+        const gelenModel = sonuc.Model?.trim() || "";
+        const gelenYil = sonuc.ModelYear?.trim() || "";
+
+        // Bizim veritabanındaki markalarla eşleştir
+        const eslesenMarka = markalar.find(
+          (m) => m.toLowerCase() === gelenMarka.toLowerCase()
+        );
+
+        if (eslesenMarka) {
+          setSecilenMarka(eslesenMarka);
+
+          // Modeli bizim araç listesinde ara
+          if (gelenModel) {
+            const eslesenArac = vehicles.find(
+              (v) =>
+                v.brand.toLowerCase() === eslesenMarka.toLowerCase() &&
+                v.model.toLowerCase().includes(gelenModel.toLowerCase().split(" ")[0])
+            );
+            if (eslesenArac) {
+              setSecilenVehicleId(eslesenArac.id);
+            }
+          }
+        }
+
+        setSasiBilgi(
+          `Tespit Edilen: ${gelenMarka} ${gelenModel} ${gelenYil ? `(${gelenYil})` : ""}`
+        );
+        setAktifSayfa(1);
+      } else {
+        setSasiBilgi("Araç bilgisi çözülemedi. Şasi numarasını kontrol edin.");
+      }
+    } catch (err) {
+      console.error("VIN sorgu hatası:", err);
+      setSasiBilgi("Sorgu servisine ulaşılamadı. Manuel seçim yapabilirsiniz.");
     }
+
+    setSasiYukleniyor(false);
   };
 
   // Garaj İşlemleri
@@ -586,9 +606,10 @@ export default function Home() {
             />
             <button
               onClick={sasiNoCoz}
-              className="w-full sm:w-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition cursor-pointer shrink-0"
+              disabled={sasiYukleniyor}
+              className="w-full sm:w-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white text-xs font-bold rounded-lg transition cursor-pointer shrink-0"
             >
-              Şasiyi Çöz & Filtrele
+              {sasiYukleniyor ? "Sorgulanıyor..." : "Şasiyi Çöz & Filtrele"}
             </button>
             {sasiBilgi && (
               <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/50 border border-emerald-800/40 px-2.5 py-1 rounded-md">
